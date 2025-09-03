@@ -5,8 +5,10 @@ import connectDB from "./config/db";
 import authRoutes from "./routes/authRoutes";
 import roleRoutes from "./routes/roleRoutes";
 import floorRoutes from "./routes/floorRoutes";
+import fanModelRoutes from "./routes/fanModelRoutes";
 import fanRoutes from "./routes/fanRoutes";
-
+import http from "http";
+import { initSocket } from "./config/socket";
 dotenv.config();
 const app: Application = express();
 const PORT = process.env.PORT||5000;
@@ -22,17 +24,20 @@ app.get("/", (req, res) => {
 
 // Middleware
 app.use(express.json());
+const server = http.createServer(app);
 
 // // Routes
 app.use("/auth", authRoutes);
 app.use("/role", roleRoutes);
 app.use("/floor", floorRoutes);
 app.use("/fan", fanRoutes);
+app.use("/fanmodel", fanModelRoutes);
 
+initSocket(server);
 
 // Start Server
 connectDB().then(() => {
-  app.listen(PORT, () => {
+  server.listen(PORT, () => {
     console.log(`🚀 Server running on http://localhost:${PORT}`);
   });
 });

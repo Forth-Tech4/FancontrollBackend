@@ -2,8 +2,18 @@ import mongoose from "mongoose";
 
 const fanSchema = new mongoose.Schema(
   {
-    floorId: { type: mongoose.Schema.Types.ObjectId, ref: "floor", required: true },
+    fanId: { type: Number, required: true },
+    floorId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "floor",
+      required: true,
+    },
     name: { type: String, required: true },
+    fanModelId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Fanmodel",
+      required: true,
+    },
     status: { type: String, enum: ["ON", "OFF"], default: "OFF" },
     rpm: { type: Number, default: 0 }, // Fan speed
   },

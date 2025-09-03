@@ -5,10 +5,12 @@ import floor from "../schema/floorSchema";
 import layout from "../schema/layoutSchema";
 import mongoose from "mongoose";
 import { authenticate, checkRole } from "../middleware/auth";
+import Fan from "../schema/fanSchema";
+
 const router = express.Router();
 
 // Add Floor -> optionally create Layout
-router.post("/",authenticate,checkRole("SuperAdmin"),async (req, res) => {
+router.post("/", authenticate, checkRole("SuperAdmin"), async (req, res) => {
   const { name, file } = req.body;
 
   if (!name) {
@@ -16,23 +18,23 @@ router.post("/",authenticate,checkRole("SuperAdmin"),async (req, res) => {
   }
 
   try {
+    // Check duplicate floor
     const existingFloor = await floor.findOne({ name: name.trim() });
     if (existingFloor) {
       return errorResponse(res, "Floor name already exists", 400);
     }
 
-    // 1. Save floor
+    // 1. Save floor (with file path if provided)
     const floorAdd = new floor({ name, file: file || null });
     await floorAdd.save();
 
     let layoutAdd = null;
 
-    // 2. Only add layout if file exists
+    // 2. Only create layout if file exists
     if (file) {
       layoutAdd = new layout({
         floorId: floorAdd._id,
-        file,
-        meta: {},
+        meta: {},   // ✅ only storing meta & floorId
       });
       await layoutAdd.save();
     }
@@ -49,6 +51,7 @@ router.post("/",authenticate,checkRole("SuperAdmin"),async (req, res) => {
     return errorResponse(res, "Internal server error", 500, err);
   }
 });
+
 
 // Get All Floors with Layout
 router.get("/", authenticate, async (req, res) => {
@@ -81,7 +84,7 @@ router.get("/", authenticate, async (req, res) => {
 });
 
 // Update Floor (name/path)
-router.put("/:id", authenticate, checkRole("SuperAdmin"),async (req, res) => {
+router.put("/:id", authenticate, checkRole("SuperAdmin"), async (req, res) => {
   const { id } = req.params;
   const { name, file } = req.body;
 
@@ -102,23 +105,21 @@ router.put("/:id", authenticate, checkRole("SuperAdmin"),async (req, res) => {
       }
       floorFind.name = name.trim();
     }
-    if (file) floorFind.file = file;
+
+    if (file) {
+      // still allow floor table to hold file (path or name)
+      floorFind.file = file;
+    }
+
     await floorFind.save();
 
     // --- Handle layout logic ---
-    let layoutDoc = null;
-    if (file) {
-      layoutDoc = await layout.findOne({ floorId: floorFind._id });
+    let layoutDoc = await layout.findOne({ floorId: floorFind._id });
 
-      if (layoutDoc) {
-        // update existing layout
-        layoutDoc.file = file;
-        await layoutDoc.save();
-      } else {
-        // insert new layout
+    if (file) {
+      if (!layoutDoc) {
         layoutDoc = new layout({
           floorId: floorFind._id,
-          file,
           meta: {},
         });
         await layoutDoc.save();
@@ -139,25 +140,30 @@ router.put("/:id", authenticate, checkRole("SuperAdmin"),async (req, res) => {
 });
 
 // Update Layout JSON meta
-router.put("/layouts/:floorId", authenticate,checkRole("SuperAdmin"), async (req, res) => {
-  const { floorId } = req.params;
-  const { meta } = req.body;
+router.put(
+  "/layouts/:floorId",
+  authenticate,
+  checkRole("SuperAdmin"),
+  async (req, res) => {
+    const { floorId } = req.params;
+    const { meta } = req.body;
 
-  if (!meta) return errorResponse(res, "meta JSON is required", 400);
+    if (!meta) return errorResponse(res, "meta JSON is required", 400);
 
-  try {
-    const layoutFind: any = await layout.findOne({ floorId });
-    if (!layoutFind)
-      return errorResponse(res, "Layout not found for this floor", 404);
+    try {
+      const layoutFind: any = await layout.findOne({ floorId });
+      if (!layoutFind)
+        return errorResponse(res, "Layout not found for this floor", 404);
 
-    layoutFind.meta = meta;
-    await layoutFind.save();
+      layoutFind.meta = meta;
+      await layoutFind.save();
 
-    return successResponse(res, layout, "Layout updated successfully");
-  } catch (err) {
-    return errorResponse(res, "Internal server error", 500, err);
+      return successResponse(res, layout, "Layout updated successfully");
+    } catch (err) {
+      return errorResponse(res, "Internal server error", 500, err);
+    }
   }
-});
+);
 
 // Get Floor by ID with Layout (using relation query)
 router.get("/get/:id", authenticate, async (req, res) => {
@@ -196,5 +202,51 @@ router.get("/get/:id", authenticate, async (req, res) => {
     return errorResponse(res, "Internal server error", 500, err);
   }
 });
+
+// Delete Floor (with related data + backup)
+router.delete("/:id", authenticate, checkRole("SuperAdmin"), async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const floorFind = await floor.findById(id);
+    if (!floorFind) {
+      return errorResponse(res, "Floor not found", 404);
+    }
+
+    // // --- Collect related data ---
+    // const layoutFind = await layout.findOne({ floorId: id });
+    // const fansFind = await Fan.find({ floorId: id });
+
+    // // --- Build backup payload ---
+    // const backupData = {
+    //   type: "FLOOR_DELETE",
+    //   floor: floorFind.toObject(),
+    //   layout: layoutFind ? layoutFind.toObject() : null,
+    //   fans: fansFind.map((f) => f.toObject()),
+    //   deletedAt: new Date(),
+    // };
+
+    // // --- Save backup ---
+    // const backupDoc = new Backup(backupData);
+    // await backupDoc.save();
+
+    // --- Delete related data ---
+    const deleteFloorData:any= await Promise.all([
+      layout.deleteOne({ floorId: id }),
+      Fan.deleteMany({ floorId: id }),
+      floor.deleteOne({ _id: id }),
+    ]);
+
+      return successResponse(
+      res,
+      deleteFloorData,
+      "All floors with layout fetched successfully",200
+    );
+
+  } catch (err) {
+    return errorResponse(res, "Internal server error", 500, err);
+  }
+});
+
 
 export default router;

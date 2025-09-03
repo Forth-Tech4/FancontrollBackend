@@ -10,7 +10,6 @@ export interface ILayout extends Document {
 const layoutSchema = new Schema<ILayout>(
   {
     floorId: { type: Schema.Types.ObjectId, ref: "floor", required: true },
-    file: { type: String, required: true },
     meta: { type: Schema.Types.Mixed, default: {} },
   },
   { timestamps: true }
