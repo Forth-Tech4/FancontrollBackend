@@ -1,6 +1,6 @@
 import express, { Application } from "express";
 import dotenv from "dotenv";
-import cors from "cors";   // ✅ import cors
+import cors from "cors"; // ✅ import cors
 import connectDB from "./config/db";
 import authRoutes from "./routes/authRoutes";
 import roleRoutes from "./routes/roleRoutes";
@@ -11,9 +11,9 @@ import http from "http";
 import { initSocket } from "./config/socket";
 dotenv.config();
 const app: Application = express();
-const PORT = process.env.PORT||5000;
+const PORT = process.env.PORT || 5000;
 
-app.use(cors())
+app.use(cors());
 
 app.get("/", (req, res) => {
   res.status(200).json({
